@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Hourly Loop Recorder</title>
+<style>
+:root{--bg:#f6f7f4;--fg:#1b1f1c;--mut:#667068;--line:#d9ddd6;--panel:#ffffff;--rec:#c8322b;--ok:#2f6b4f;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1210;--fg:#e8ece8;--mut:#8b968d;--line:#2a312c;--panel:#171c18;--rec:#ef5a50;--ok:#6fbf95}}
+:root[data-theme="dark"]{--bg:#0f1210;--fg:#e8ece8;--mut:#8b968d;--line:#2a312c;--panel:#171c18;--rec:#ef5a50;--ok:#6fbf95}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 "Avenir Next","Segoe UI",system-ui,sans-serif}
+main{max-width:480px;margin:0 auto;padding:20px 16px 32px}
+h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-.01em}
+.sub{color:var(--mut);margin:0 0 20px;font-size:14px}
+.clock{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center}
+.state{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:var(--mut)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mut)}
+.on .dot{background:var(--rec);animation:p 1.6s infinite}
+@keyframes p{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.on .dot{animation:none}}
+.big{font:700 44px/1.1 ui-monospace,"SF Mono",Menlo,monospace;margin:8px 0 2px;font-variant-numeric:tabular-nums}
+.bar{height:6px;border-radius:3px;background:var(--line);margin:14px 0 8px;overflow:hidden}
+.bar i{display:block;height:100%;width:0;background:var(--rec)}
+.small{font-size:13px;color:var(--mut)}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--fg);border-radius:12px;padding:12px 14px;cursor:pointer}
+button:focus-visible,select:focus-visible{outline:2px solid var(--ok);outline-offset:2px}
+#go{width:100%;margin:14px 0;padding:16px;font-size:18px;font-weight:700;background:var(--rec);border-color:var(--rec);color:#fff}
+#go.stop{background:var(--panel);color:var(--fg);border-color:var(--fg)}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.opts{margin-top:18px;display:grid;gap:10px}
+label{display:flex;justify-content:space-between;align-items:center;gap:12px;font-size:15px}
+select{font:inherit;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:10px;padding:8px}
+.note{margin-top:20px;font-size:13px;color:var(--mut);border-top:1px solid var(--line);padding-top:14px}
+video{width:100%;border-radius:12px;margin-top:14px;background:#000;display:none}
+#msg{margin-top:10px;font-size:14px;color:var(--rec);min-height:20px}
+#dim{position:fixed;inset:0;background:#000;z-index:99;display:none}
+[hidden]{display:none!important}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px}
+.tabs button.act{background:var(--fg);color:var(--bg);border-color:var(--fg)}
+.live{margin-top:14px;padding:12px 14px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.code{font:700 30px ui-monospace,Menlo,monospace;letter-spacing:.14em}
+input[type=text]{font:inherit;width:100%;background:var(--panel);color:var(--fg);border:1px solid var(--line);border-radius:12px;padding:14px;font-size:20px;letter-spacing:.2em;text-align:center}
+</style>
+</head>
+<body>
+<main>
+<div class="tabs"><button id="tCam" class="act">Camera phone</button><button id="tWatch">Watch live</button></div>
+<div id="camPane">
+<h1>Hourly loop recorder</h1>
+<p class="sub">Records nonstop in low power mode. Each hour’s video is deleted when the next hour begins.</p>
+
+<section class="clock" id="clock">
+<div class="state"><span class="dot"></span><span id="stateTxt">Not recording</span></div>
+<div class="big" id="elapsed">00:00:00</div>
+<div class="small">recorded this hour</div>
+<div class="bar"><i id="fill"></i></div>
+<div class="small" id="info">Deletes in 60:00 · 0 MB used</div>
+</section>
+
+<button id="go">Start recording</button>
+<div class="row">
+<button id="prev">Preview</button>
+<button id="dimBtn">Dim screen</button>
+<button id="save">Save clip</button>
+</div>
+<div id="msg" role="status"></div>
+<video id="v" muted playsinline controls></video>
+<div class="live" id="liveBox" hidden><div class="small">Live view code</div><div class="code" id="code"></div><div class="small" id="liveTxt"></div></div>
+
+<div class="opts">
+<label>Camera <select id="cam"><option value="environment">Back</option><option value="user">Front</option></select></label>
+<label>Quality <select id="q"><option value="low">Low (480p, saves battery)</option><option value="med">Medium (720p)</option></select></label>
+<label>Record sound <input type="checkbox" id="aud"></label>
+<label>Share live view <input type="checkbox" id="share" checked></label>
+</div>
+
+<p class="note">A web page can only record while it stays open with the screen on. Keep the phone plugged in or use Dim screen, which turns the display black while recording continues. “Save clip” keeps the current hour before it is deleted.</p>
+</div>
+<div id="watchPane" hidden>
+<h1>Watch live</h1>
+<p class="sub">Start recording on the camera phone, then enter the 8-character code it shows.</p>
+<input type="text" id="wcode" maxlength="8" placeholder="code" autocomplete="off" autocapitalize="off" spellcheck="false">
+<button id="wgo" style="width:100%;margin-top:10px">Connect</button>
+<div id="wmsg" class="small" role="status" style="margin-top:10px"></div>
+<video id="rv" muted playsinline controls style="display:none"></video>
+<p class="note">Open this same page on both phones. The live picture is lower quality than the saved video to keep the camera phone’s battery use down.</p>
+</div>
+</main>
+<div id="dim"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script>
+const $=id=>document.getElementById(id);
+const SEG=3600000, CHUNK=10000;
+const MIME=['video/mp4;codecs=avc1','video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm','video/mp4'].find(t=>window.MediaRecorder&&MediaRecorder.isTypeSupported(t))||'';
+let db,stream,rec,segId=null,segStart=0,segBytes=0,q=Promise.resolve(),ticker,wake,running=false,rolling=false,wanted=false;
+
+function openDb(){return new Promise((ok,no)=>{const r=indexedDB.open('loopcam',1);
+r.onupgradeneeded=()=>r.result.createObjectStore('c');
+r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)})}
+function tx(mode,fn){return new Promise((ok,no)=>{const t=db.transaction('c',mode),s=t.objectStore('c');const out=fn(s);
+t.oncomplete=()=>ok(out&&out.result);t.onerror=()=>no(t.error);t.onabort=()=>no(t.error)})}
+const rng=seg=>IDBKeyRange.bound([seg,0],[seg,Infinity]);
+const put=(seg,n,b)=>tx('readwrite',s=>s.put(b,[seg,n]));
+const delSeg=seg=>seg==null?Promise.resolve():tx('readwrite',s=>s.delete(rng(seg)));
+const clearAll=()=>tx('readwrite',s=>s.clear());
+const getSeg=seg=>tx('readonly',s=>s.getAll(rng(seg)));
+
+const pad=n=>String(n).padStart(2,'0');
+const hms=ms=>{const s=Math.max(0,Math.floor(ms/1000));return pad(Math.floor(s/3600))+':'+pad(Math.floor(s%3600/60))+':'+pad(s%60)};
+const ms2=ms=>{const s=Math.max(0,Math.ceil(ms/1000));return pad(Math.floor(s/60))+':'+pad(s%60)};
+const say=t=>{$('msg').textContent=t||''};
+
+async function lockScreen(){try{if('wakeLock'in navigator&&wanted){wake=await navigator.wakeLock.request('screen')}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running)lockScreen()});
+
+function newSegment(){
+  const my=Date.now();segId=my;segStart=my;segBytes=0;let idx=0;
+  const hd=$('q').value==='med';
+  const opts={videoBitsPerSecond:hd?1000000:400000};
+  if(MIME)opts.mimeType=MIME;
+  rec=new MediaRecorder(stream,opts);
+  rec.ondataavailable=e=>{if(e.data&&e.data.size){const i=idx++;segBytes+=e.data.size;q=q.then(()=>put(my,i,e.data)).catch(()=>say('Storage full or blocked. Recording may be incomplete.'))}};
+  rec.start(CHUNK);
+}
+
+async function rollover(){
+  if(rolling)return;rolling=true;
+  try{
+    const old=segId,r=rec;
+    await new Promise(res=>{r.onstop=res;r.stop()});
+    newSegment();
+    await q;await delSeg(old);
+  }finally{rolling=false}
+}
+
+function errMsg(e){
+  const n=e&&e.name;
+  if(n==='NotAllowedError'||n==='SecurityError')return 'Camera is blocked. Allow camera for this site in your browser settings, then reload.';
+  if(n==='NotFoundError')return 'No camera found on this phone.';
+  if(n==='NotReadableError')return 'Another app is using the camera. Close it and try again.';
+  if(n==='OverconstrainedError')return 'This camera doesn’t support the chosen settings. Try the other camera.';
+  return 'Couldn’t start: '+(n||'error')+(e&&e.message?' – '+e.message:'');
+}
+async function start(){
+  say('');
+  if(!window.MediaRecorder||!navigator.mediaDevices){say(window.isSecureContext?'This browser can’t record video. Try Chrome or Safari.':'Camera needs a secure https page. Open the GitHub Pages link, not the file.');return}
+  try{
+    db=await openDb();await clearAll();
+    const hd=$('q').value==='med';
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:$('cam').value},width:{ideal:hd?1280:640},height:{ideal:hd?720:480},frameRate:{ideal:15,max:15}},
+      audio:$('aud').checked});
+  }catch(e){say(errMsg(e));return}
+  running=true;wanted=true;await lockScreen();
+  newSegment();
+  $('v').srcObject=stream;
+  ticker=setInterval(tick,1000);
+  if($('share').checked)startShare();
+  setUi(true);tick();
+}
+
+async function stop(){
+  running=false;wanted=false;clearInterval(ticker);stopShare();
+  try{await new Promise(res=>{rec.onstop=res;rec.stop()})}catch(e){}
+  stream.getTracks().forEach(t=>t.stop());
+  try{await q;if(wake)await wake.release()}catch(e){}
+  wake=null;setUi(false);
+  say('Stopped. The last hour is kept until you start again, so you can still save it.');
+}
+
+function setUi(on){
+  $('clock').classList.toggle('on',on);
+  $('stateTxt').textContent=on?'Recording':'Not recording';
+  $('go').textContent=on?'Stop recording':'Start recording';
+  $('go').classList.toggle('stop',on);
+  ['cam','q','aud','share'].forEach(i=>$(i).disabled=on);
+}
+
+function tick(){
+  if(!running)return;
+  const el=Date.now()-segStart;
+  if(el>=SEG)rollover();
+  $('elapsed').textContent=hms(Math.min(el,SEG));
+  $('fill').style.width=Math.min(100,el/SEG*100)+'%';
+  $('info').textContent='Deletes in '+ms2(SEG-el)+' · '+(segBytes/1048576).toFixed(0)+' MB used';
+}
+
+$('go').onclick=()=>running?stop():start();
+
+$('prev').onclick=()=>{
+  const v=$('v');
+  if(v.style.display==='block'){v.style.display='none';v.pause();$('prev').textContent='Preview';return}
+  if(!stream){say('Start recording to see a live preview.');return}
+  v.srcObject=stream;v.controls=false;v.style.display='block';v.play().catch(()=>{});$('prev').textContent='Hide preview';
+};
+
+$('dimBtn').onclick=()=>{$('dim').style.display='block';
+  if(document.documentElement.requestFullscreen)document.documentElement.requestFullscreen().catch(()=>{})};
+$('dim').onclick=()=>{$('dim').style.display='none';
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{})};
+
+$('save').onclick=async()=>{
+  if(segId==null||!db){say('Nothing recorded yet.');return}
+  try{
+    if(running&&rec.state==='recording')rec.requestData();
+    await new Promise(r=>setTimeout(r,400));await q;
+    const parts=await getSeg(segId);
+    if(!parts.length){say('Nothing saved yet. Wait about 10 seconds and try again.');return}
+    const type=(MIME||'video/webm').split(';')[0];
+    const blob=new Blob(parts,{type});
+    const ext=type.includes('mp4')?'mp4':'webm';
+    const file=new File([blob],'clip-'+Date.now()+'.'+ext,{type});
+    if(navigator.canShare&&navigator.canShare({files:[file]})){await navigator.share({files:[file]});say('');return}
+    const v=$('v');v.srcObject=null;v.src=URL.createObjectURL(blob);v.controls=true;v.muted=false;v.style.display='block';
+    say('Sharing isn’t available here. Press and hold the video to save it.');
+  }catch(e){if(e&&e.name!=='AbortError')say('Couldn’t save the clip.')}
+};
+function tab(w){$('camPane').hidden=w;$('watchPane').hidden=!w;$('tCam').classList.toggle('act',!w);$('tWatch').classList.toggle('act',w)}
+$('tCam').onclick=()=>tab(false);$('tWatch').onclick=()=>tab(true);
+
+/* ---- live view: PeerJS (free public broker) + WebRTC ---- */
+const ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
+const AL='abcdefghjkmnpqrstuvwxyz23456789';
+const mkCode=()=>Array.from(crypto.getRandomValues(new Uint8Array(8)),b=>AL[b%AL.length]).join('');
+const wmsg=t=>{$('wmsg').textContent=t};
+
+/* camera phone */
+let CP=null,CALLS=[];
+function liveCount(){
+  const n=CALLS.filter(c=>c.open).length;
+  if(CP&&$('code').textContent)$('liveTxt').textContent=n?n+' watching.':'On your other phone, open this page, tap Watch live and enter the code.';
+}
+function startShare(){
+  $('liveBox').hidden=false;$('code').textContent='';
+  if(typeof Peer==='undefined'){$('liveTxt').textContent='Live view couldn’t load. Check your internet connection and reload.';return}
+  const code=mkCode();
+  const p=CP=new Peer('lc-'+code,{config:ICE});
+  p.on('open',()=>{$('code').textContent=code;liveCount()});
+  p.on('error',e=>{
+    if(e.type==='unavailable-id'){p.destroy();if(running)startShare()}
+    else $('liveTxt').textContent='Live view problem: '+e.type;
+  });
+  p.on('connection',conn=>conn.on('open',()=>{
+    if(!stream)return;
+    const call=p.call(conn.peer,stream);CALLS.push(call);
+    call.on('stream',liveCount);call.on('close',liveCount);call.on('error',liveCount);
+    setTimeout(()=>{try{call.peerConnection.getSenders().forEach(s=>{if(s.track&&s.track.kind==='video'){const x=s.getParameters();if(!x.encodings||!x.encodings.length)x.encodings=[{}];x.encodings[0].maxBitrate=350000;s.setParameters(x).catch(()=>{})}})}catch(e){}},1500);
+  }));
+}
+function stopShare(){
+  CALLS.forEach(c=>{try{c.close()}catch(e){}});CALLS=[];
+  if(CP){CP.destroy();CP=null}
+  $('liveBox').hidden=true;$('code').textContent='';
+}
+
+/* viewer phone */
+let VP=null,VT=null;
+function endWatch(){clearTimeout(VT);if(VP){VP.destroy();VP=null}$('rv').srcObject=null;$('rv').style.display='none'}
+function watch(){
+  const c=$('wcode').value.trim().toLowerCase();
+  if(!/^[a-z0-9]{8}$/.test(c)){wmsg('Enter the 8-character code shown on the camera phone.');return}
+  if(typeof Peer==='undefined'){wmsg('Live view couldn’t load. Check your internet connection and reload.');return}
+  endWatch();wmsg('Connecting…');
+  const p=VP=new Peer({config:ICE});
+  const dial=()=>{if(VP!==p)return;const conn=p.connect('lc-'+c);conn.on('error',()=>{})};
+  p.on('open',dial);
+  p.on('call',call=>{
+    call.answer();
+    call.on('stream',st=>{const v=$('rv');v.srcObject=st;v.style.display='block';v.play().catch(()=>{});wmsg('Live')});
+    call.on('close',()=>{wmsg('Camera disconnected. Reconnecting…');VT=setTimeout(dial,4000)});
+  });
+  p.on('error',e=>{
+    if(e.type==='peer-unavailable'){wmsg('Waiting for the camera…');VT=setTimeout(dial,4000)}
+    else wmsg('Problem: '+e.type);
+  });
+}
+$('wgo').onclick=watch;
+</script>
+</body>
+</html>
